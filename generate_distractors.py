@@ -19,9 +19,9 @@ Our 5 rules for an "in-topic but irrelevant" sentence:
   R3. Mentions no person: no names, no personal pronouns (he, she, they, ...), and no
       words for people (e.g. "a customer", "a friend"). It describes an object, place,
       or setting instead, so the problem's pronouns cannot refer to it.
-  R4. Has one number: a realistic amount of the same kind and size as a number in the
-      problem (between half and double it), but different from every number in the
-      problem and from the correct answer.
+  R4. Has exactly one number, written in digits, that is realistic for what it
+      describes, similar in size to one of the problem's numbers (between half and
+      double it), and different from every number in the problem and from the answer.
   R5. Avoids phrases that only work after earlier context (e.g. "as well", "more than",
       "a different"), so it reads naturally at the beginning, middle, or right before
       the question.
@@ -29,7 +29,8 @@ Our 5 rules for an "in-topic but irrelevant" sentence:
 What the automatic checks can and can't do:
   - R3, R4, R5 are checked with heuristics (names, pronouns, person words, numbers,
     banned phrases).
-  - R1 and R2 need a human: read the flagged rows and a sample of the rest.
+  - R1, R2, and whether R4's number is realistic need a human: read the flagged rows
+    and a sample of the rest.
   - Nothing is deleted automatically. Flags are for manual review.
 
 Usage (after running select_problems.py):
@@ -70,7 +71,7 @@ Write ONE sentence that could be inserted into the problem below. It must follow
 1. It is about the same topic as a part of the problem, whether that be the objects, settings, or units of measurement. For example, if a problem is about buying apples at a market, you could write about the price of pears, the hours a market is open, or the weight of a bag of apples.
 2. It is unnecessary for solving the problem and does NOT change the correct answer.
 3. It does not mention any person: no names, no pronouns like "he", "she", or "they", and no words for people like "a customer" or "a friend". Describe an object, place, or setting instead.
-4. It contains exactly ONE number, written in digits. The number is a realistic amount of the same kind as one of the problem's numbers (a dollar amount for a dollar amount, a percent for a percent, a count of similar items for a count) and between half and double that number. It must not be any of these numbers: {forbidden}.
+4. It contains exactly ONE number, written in digits. The number is realistic for what it describes and similar in size to one of the problem's numbers (between half and double that number). It must not be any of these numbers: {forbidden}.
 5. It makes sense on its own, whether it is placed at the start of the problem, in the middle, or right before the question. Do not use phrases that depend on earlier sentences, such as "as well", "also", "too", "more than", "another", "other", "different", "separate", "the rest", or "the same".
 
 It must be a statement, not a question.
@@ -185,7 +186,7 @@ def check_distractor(distractor: str, question: str, gold: str) -> list[str]:
     if person_words:
         flags.append("R3_mentions_person_word:" + ",".join(person_words))
 
-    # R4: exactly one number, different from all problem numbers, in range.
+    # R4: exactly one number, different from all problem numbers and the answer, in range.
     d_nums = extract_numbers(distractor)
     q_nums = extract_numbers(question, include_words=True)
     if len(d_nums) != 1:
