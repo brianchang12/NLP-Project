@@ -2,21 +2,22 @@
 select_problems.py
 
 Picks which GSM8K test problems the project uses, ONCE, with a fixed seed,
-and saves only their indices to problem_ids.json.
+and saves only their indices to data/problems/problem_ids.json.
 
 Only problems with at least MIN_SENTENCES sentences (counting the question)
 are eligible, so the beginning, middle, and before-question positions are
 always distinct. split_sentences() is the one sentence splitter for the whole
 project.
 
-Usage:
-  python select_problems.py                  # writes problem_ids.json
+Usage (from the repo root):
+  python nlp_project/src/nlp_project/scripts/select_problems.py
 """
 
 import argparse
 import json
 import random
 import re
+from pathlib import Path
 
 from datasets import load_dataset
 
@@ -27,7 +28,8 @@ SPLIT = "test"
 SEED = 11
 N_PROBLEMS = 300
 MIN_SENTENCES = 3
-IDS_PATH = "problem_ids.json"
+DATA_DIR = Path(__file__).resolve().parents[1] / "data"
+IDS_PATH = DATA_DIR / "problems" / "problem_ids.json"
 # -----------------------------------------------------------------------
 
 ABBREVIATIONS = {
@@ -79,7 +81,7 @@ def select_indices(n: int, seed: int, candidates: list[int]) -> list[int]:
 
 def load_selected_problems(ids_path: str = IDS_PATH) -> list[dict]:
     """
-    Read problem_ids.json and return the selected problems as dicts:
+    Read data/problems/problem_ids.json and return the selected problems as dicts:
       {"idx", "question", "solution", "gold"}
     """
     with open(ids_path) as f:

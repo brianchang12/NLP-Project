@@ -1,8 +1,8 @@
 """Apply the manual review decisions to the generated distractors.
 
-Reads distractors.json (output of generate_distractors.py), removes every row
+Reads data/distractors/distractors.json (output of generate_distractors.py), removes every row
 listed in the DISCARD dict below, and writes only the kept rows to
-distractors_final.json. The evaluation script uses this file as is.
+data/distractors/distractors_final.json. The evaluation script uses this file as is.
 
 Review rule: a distractor is discarded if it breaks any of the 5 rules
 (R1 to R5) in generate_distractors.py. Distractors are never edited by hand,
@@ -12,10 +12,12 @@ dict is the record of what was dropped and why.
 
 import json
 from collections import Counter
+from pathlib import Path
 
 # Input file from generate_distractors.py, and the output file for evaluation.
-IN_PATH = "distractors.json"
-OUT_PATH = "distractors_final.json"
+DATA_DIR = Path(__file__).resolve().parents[1] / "data"
+IN_PATH = DATA_DIR / "distractors" / "distractors.json"
+OUT_PATH = DATA_DIR / "distractors" / "distractors_final.json"
 
 # Problems to drop, keyed by GSM8K test index (the "idx" field in the JSON).
 # Start each reason with the rule that was broken, followed by a colon,

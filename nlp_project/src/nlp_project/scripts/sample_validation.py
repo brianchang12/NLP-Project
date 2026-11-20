@@ -1,15 +1,17 @@
 """Randomly choose 50 kept problems for manual review.
 
-Reads distractors_final.json (output of apply_review.py), picks N_SAMPLE
+Reads data/distractors/distractors_final.json (output of apply_review.py), picks N_SAMPLE
 rows with a fixed seed, and saves those problems and their distractors to
-validation_sample.json.
+data/samples/validation_sample.json.
 """
 
 import json
 import random
+from pathlib import Path
 
-IN_PATH = "distractors_final.json"
-OUT_PATH = "validation_sample.json"
+DATA_DIR = Path(__file__).resolve().parents[1] / "data"
+IN_PATH = DATA_DIR / "distractors" / "distractors_final.json"
+OUT_PATH = DATA_DIR / "samples" / "validation_sample.json"
 SEED = 11
 N_SAMPLE = 50
 

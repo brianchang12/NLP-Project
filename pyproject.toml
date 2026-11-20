@@ -6,7 +6,10 @@ authors = [
     { name = "Brian Chang", email = "brian.bcyvr@gmail.com" }
 ]
 dependencies = [
-    "transformers[torch]"
+    "accelerate",
+    "bitsandbytes",
+    "datasets",
+    "transformers[torch]",
 ]
 
 [project.optional-dependencies]

@@ -5,11 +5,11 @@ Generates ONE in-topic but irrelevant sentence (a "distractor") for each
 selected GSM8K problem, using Gemma 4 12B.
 
 Pipeline:
-  1. Load the problems chosen by select_problems.py (problem_ids.json).
+  1. Load the problems chosen by select_problems.py (data/problems/problem_ids.json).
   2. For each problem, make a fresh model call with the same fixed prompt.
   3. Check the sentence against our 5 rules with simple automatic checks.
      If it fails, retry a few times; keep the attempt with the fewest flags.
-  4. Save everything to distractors.json (original question + distractor,
+  4. Save everything to data/distractors/distractors.json (original question + distractor,
      plus gold answer, flags, and how many attempts it took).
 
 Our 5 rules for an "in-topic but irrelevant" sentence:
@@ -33,14 +33,15 @@ What the automatic checks can and can't do:
     and a sample of the rest.
   - Nothing is deleted automatically. Flags are for manual review.
 
-Usage (after running select_problems.py):
-  python generate_distractors.py
+Usage (from the repo root, after running select_problems.py):
+  python nlp_project/src/nlp_project/scripts/generate_distractors.py
 """
 
 import json
 import os
 import re
 import time
+from pathlib import Path
 
 import torch
 from transformers import AutoModelForMultimodalLM, AutoProcessor, BitsAndBytesConfig
@@ -60,8 +61,9 @@ RETRY_TEMPERATURE = 0.7
 RANGE_LOW = 0.5
 RANGE_HIGH = 2.0
 
-PROGRESS_PATH = "distractors_progress.jsonl"  # written row by row (survives disconnects)
-OUT_PATH = "distractors.json"                 # final file
+DATA_DIR = Path(__file__).resolve().parents[1] / "data"
+PROGRESS_PATH = DATA_DIR / "distractors" / "distractors_progress.jsonl"  # written row by row (survives disconnects)
+OUT_PATH = DATA_DIR / "distractors" / "distractors.json"                 # final file
 # -----------------------------------------------------------------------
 
 # The fixed prompt. Every problem gets exactly this text with only {question} and {forbidden} filled in.
@@ -301,7 +303,7 @@ def main():
             if n % 20 == 0:
                 print(f"{n}/{len(problems)} done, {time.time() - start:.0f}s elapsed")
 
-    # Final file, in the same order as problem_ids.json.
+    # Final file, in the same order as data/problems/problem_ids.json.
     rows = [done[p["idx"]] for p in problems]
     settings = {
         "model": MODEL_ID, "revision": REVISION, "seed": SEED,
