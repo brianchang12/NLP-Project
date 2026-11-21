@@ -9,6 +9,8 @@ dependencies = [
     "accelerate",
     "bitsandbytes",
     "datasets",
+    "pillow",
+    "torchvision",
     "transformers[torch]",
 ]
 
@@ -16,6 +18,9 @@ dependencies = [
 dev = [
     "black",
 ]
+
+[tool.setuptools]
+packages = []
 
 [build-system]
 requires = ["setuptools>=61.0"]

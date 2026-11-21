@@ -8,9 +8,9 @@ comes from eval_baseline.py, so this condition differs from the clean run
 only in the inserted sentence. Each problem uses its one reviewed distractor
 from distractors_final.json, the same sentence used at every position.
 
-Usage
-  python eval_middle.py                  # run this condition
-  python eval_middle.py --limit 4 --out-dir results_smoke   # quick test
+Usage (from the repo root):
+  python nlp_project/src/nlp_project/scripts/eval_middle.py
+  python nlp_project/src/nlp_project/scripts/eval_middle.py --limit 4 --out-dir results_smoke
 
 Tables are made separately by make_tables.py.
 Results go to results/middle.jsonl. Rerunning resumes where it stopped.

@@ -20,17 +20,17 @@ It also saves each finished condition as one JSON file, results/<condition>.json
 To add a bin type, write a function that takes one row of
 distractors_final.json and returns a number, then add an entry to BIN_TYPES.
 
-Usage
-  python make_tables.py
+Usage (from the repo root):
+  python nlp_project/src/nlp_project/scripts/make_tables.py
 
-Inputs needed in the same folder:
-  distractors_final.json, select_problems.py, eval_baseline.py, results/
+Reads data/distractors/distractors_final.json and results/ at the repo root.
 """
 
 import json
 import math
 import os
 import textwrap
+from pathlib import Path
 
 # Reuse the evaluation code so problems, sentence units and answer numbers
 # are read exactly the same way as during the runs.
@@ -39,7 +39,7 @@ from eval_baseline import (
     question_units, read_results, results_path,
 )
 
-TABLES_DIR = "tables"
+TABLES_DIR = str(Path(RESULTS_DIR).parent / "tables")
 
 
 # =======================================================================

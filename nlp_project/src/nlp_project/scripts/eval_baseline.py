@@ -13,16 +13,18 @@ What it does
   2. Builds the problem text for one condition (baseline here).
   3. Runs Qwen with greedy decoding and saves every output to
      results/<condition>.jsonl (it resumes if Colab disconnects).
+     When the condition finishes, it also writes
+     results/<condition>_YYYY-MM-DD_HH-MM-SSZ.json.
 
 Tables and accuracy bins are made separately by make_tables.py, which only
 reads the results files.
 
-Usage
-  python eval_baseline.py                          # run the clean condition
-  python eval_baseline.py --limit 4 --out-dir results_smoke   # quick test
+Usage (from the repo root):
+  python nlp_project/src/nlp_project/scripts/eval_baseline.py
+  python nlp_project/src/nlp_project/scripts/eval_baseline.py --limit 4 --out-dir results_smoke
 
-Inputs needed in the same folder:
-  distractors_final.json, select_problems.py
+Reads data/distractors/distractors_final.json (located from this file, not the
+working directory). Results are written under results/ at the repo root.
 """
 
 import argparse
@@ -30,14 +32,19 @@ import json
 import math
 import os
 import re
+from datetime import datetime, timezone
+from pathlib import Path
 
 # We reuse the project's one sentence splitter so positions are defined the
 # same way as the "at least 3 sentences" filter in select_problems.py.
 from select_problems import split_sentences
 
 # ---------------- Settings ---------------------------------------------
-DATA_PATH = "distractors_final.json"
-RESULTS_DIR = "results"
+# parents: scripts -> package -> src -> nlp_project -> repo root
+_PKG = Path(__file__).resolve().parents[1]
+_REPO = Path(__file__).resolve().parents[4]
+DATA_PATH = str(_PKG / "data" / "distractors" / "distractors_final.json")
+RESULTS_DIR = str(_REPO / "results")
 
 MODEL_ID = "Qwen/Qwen3.5-2B"
 MODEL_REVISION = "15852e8c16360a2fea060d615a32b45270f8a8fc"  # pinned Hugging Face commit
@@ -246,50 +253,78 @@ def read_results(path: str) -> dict[int, dict]:
         return {rec["idx"]: rec for rec in (json.loads(line) for line in f if line.strip())}
 
 
+def write_result_json(condition: str, out_dir: str, rows: list[dict]) -> str:
+    """Write one timestamped JSON for the problems already stored in the jsonl.
+
+    The jsonl name stays fixed so a rerun can skip finished problems. This file
+    is a snapshot, named with the UTC time it was written.
+    """
+    questions = {r["idx"]: r["question"] for r in rows}
+    recs = read_results(results_path(condition, out_dir))
+    exported = [
+        {
+            "question": questions[idx],
+            "idx": idx,
+            "gold": recs[idx]["gold"],
+            "prediction": recs[idx]["pred"],
+            "correct": recs[idx]["correct"],
+        }
+        for idx in sorted(recs)
+    ]
+    stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H-%M-%SZ")
+    dest = os.path.join(out_dir, f"{condition}_{stamp}.json")
+    with open(dest, "w") as f:
+        json.dump(exported, f, indent=2)
+        f.write("\n")
+    print(f"[{condition}] wrote {dest}")
+    return dest
+
+
 def run_condition(condition: str, limit: int = None, out_dir: str = RESULTS_DIR):
     """Generate and score answers for one condition, appending to its results file.
 
     Problems already in the file are skipped, so rerunning after a Colab
-    disconnect continues where it stopped.
+    disconnect continues where it stopped. A timestamped JSON is written when
+    the condition finishes, including when every problem was already done.
     """
     os.makedirs(out_dir, exist_ok=True)
     rows = load_rows()
-    if limit:
-        rows = rows[:limit]
+    selected = rows[:limit] if limit else rows
     path = results_path(condition, out_dir)
     done = read_results(path)
-    todo = [r for r in rows if r["idx"] not in done]
+    todo = [r for r in selected if r["idx"] not in done]
     print(f"[{condition}] {len(done)} already done, {len(todo)} to run")
-    if not todo:
-        return
 
-    tokenizer, model = load_model()
-    save_run_info(model, out_dir)
+    if todo:
+        tokenizer, model = load_model()
+        save_run_info(model, out_dir)
 
-    with open(path, "a") as f:
-        for start in range(0, len(todo), BATCH_SIZE):
-            batch = todo[start:start + BATCH_SIZE]
-            texts = [build_problem_text(r["question"], r["distractor"], condition) for r in batch]
-            outputs = generate_batch(tokenizer, model, texts)
-            for r, (output, truncated) in zip(batch, outputs):
-                pred, how = parse_answer(output)
-                rec = {
-                    "idx": r["idx"],
-                    "condition": condition,
-                    "gold": r["gold"],
-                    "pred": pred,
-                    "parse": how,
-                    "correct": is_correct(pred, r["gold"]),
-                    "truncated": truncated,
-                    "output": output,
-                }
-                f.write(json.dumps(rec) + "\n")
-            f.flush()  # write each batch to disk right away
-            print(f"[{condition}] {min(start + BATCH_SIZE, len(todo))}/{len(todo)}")
+        with open(path, "a") as f:
+            for start in range(0, len(todo), BATCH_SIZE):
+                batch = todo[start:start + BATCH_SIZE]
+                texts = [build_problem_text(r["question"], r["distractor"], condition) for r in batch]
+                outputs = generate_batch(tokenizer, model, texts)
+                for r, (output, truncated) in zip(batch, outputs):
+                    pred, how = parse_answer(output)
+                    rec = {
+                        "idx": r["idx"],
+                        "condition": condition,
+                        "gold": r["gold"],
+                        "pred": pred,
+                        "parse": how,
+                        "correct": is_correct(pred, r["gold"]),
+                        "truncated": truncated,
+                        "output": output,
+                    }
+                    f.write(json.dumps(rec) + "\n")
+                f.flush()  # write each batch to disk right away
+                print(f"[{condition}] {min(start + BATCH_SIZE, len(todo))}/{len(todo)}")
 
+    write_result_json(condition, out_dir, rows)
     recs = read_results(path)
-    acc = 100 * sum(r["correct"] for r in recs.values()) / len(recs)
-    print(f"[{condition}] accuracy {acc:.1f}% on {len(recs)} problems")
+    if recs:
+        acc = 100 * sum(r["correct"] for r in recs.values()) / len(recs)
+        print(f"[{condition}] accuracy {acc:.1f}% on {len(recs)} problems")
 
 
 def save_run_info(model, out_dir: str):
