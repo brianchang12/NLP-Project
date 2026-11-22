@@ -268,6 +268,7 @@ def write_result_json(condition: str, out_dir: str, rows: list[dict]) -> str:
             "gold": recs[idx]["gold"],
             "prediction": recs[idx]["pred"],
             "correct": recs[idx]["correct"],
+            "response": recs[idx].get("output"),
         }
         for idx in sorted(recs)
     ]
