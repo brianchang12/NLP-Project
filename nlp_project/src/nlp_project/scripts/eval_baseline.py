@@ -256,14 +256,21 @@ def read_results(path: str) -> dict[int, dict]:
 def write_result_json(condition: str, out_dir: str, rows: list[dict]) -> str:
     """Write one timestamped JSON for the problems already stored in the jsonl.
 
-    The jsonl name stays fixed so a rerun can skip finished problems. This file
-    is a snapshot, named with the UTC time it was written.
+    The question field is the text the model saw. For every condition except
+    baseline that includes the distractor in its position. Each record also
+    has a distractor field: the sentence for the position conditions, and an
+    empty string for baseline. The jsonl name stays
+    fixed so a rerun can skip finished problems. This file is a snapshot, named
+    with the UTC time it was written.
     """
-    questions = {r["idx"]: r["question"] for r in rows}
+    by_idx = {r["idx"]: r for r in rows}
     recs = read_results(results_path(condition, out_dir))
     exported = [
         {
-            "question": questions[idx],
+            "question": build_problem_text(
+                by_idx[idx]["question"], by_idx[idx]["distractor"], condition
+            ),
+            "distractor": "" if condition == "baseline" else by_idx[idx]["distractor"],
             "idx": idx,
             "gold": recs[idx]["gold"],
             "prediction": recs[idx]["pred"],
