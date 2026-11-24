@@ -19,8 +19,6 @@ import random
 import re
 from pathlib import Path
 
-from datasets import load_dataset
-
 # ---------------- Settings ---------------------------------------------
 DATASET_ID = "openai/gsm8k"
 DATASET_CONFIG = "main"
@@ -60,6 +58,7 @@ def split_sentences(text: str) -> list[str]:
 
 def load_gsm8k():
     """Load the GSM8K split from Hugging Face."""
+    from datasets import load_dataset
     return load_dataset(DATASET_ID, DATASET_CONFIG, split=SPLIT)
 
 
@@ -86,6 +85,7 @@ def load_selected_problems(ids_path: str = IDS_PATH) -> list[dict]:
     """
     with open(ids_path) as f:
         meta = json.load(f)
+    from datasets import load_dataset
     gsm = load_dataset(meta["dataset"], meta["config"], split=meta["split"])
     problems = []
     for i in meta["indices"]:

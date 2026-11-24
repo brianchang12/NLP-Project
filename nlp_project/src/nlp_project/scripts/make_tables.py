@@ -6,10 +6,11 @@ model. It only reads results/<condition>.jsonl, so you can rerun it as often
 as you like, for example after adding a new bin type.
 
 Tables (each one is printed and written as LaTeX to tables/)
-  headline   accuracy, change vs. clean, flips, answer changes and McNemar p
-             per condition, over all problems
+  headline   accuracy, no-answer count, change vs. clean, flips, answer
+             changes and McNemar p per condition, over all problems
   bins_<x>   accuracy per bin for each bin type in BIN_TYPES, with the change
-             from clean within the same bin in parentheses
+             from clean within the same bin in parentheses and the no-answer
+             count in brackets
   bin_ids    which problem ids are in each bin
   flips      problems that were right when clean and wrong with the distractor,
              marking the ones where the model used the distractor's number
@@ -22,24 +23,32 @@ distractors_final.json and returns a number, then add an entry to BIN_TYPES.
 
 Usage (from the repo root):
   python nlp_project/src/nlp_project/scripts/make_tables.py
+  python nlp_project/src/nlp_project/scripts/make_tables.py --tables-dir data/results/latex
 
-Reads data/distractors/distractors_final.json and results/ at the repo root.
+Reads data/distractors/distractors_final.json and data/results/ (both located
+from this file, not the working directory).
 """
 
+import argparse
 import json
 import math
 import os
 import textwrap
+import urllib.request
 from pathlib import Path
 
 # Reuse the evaluation code so problems, sentence units and answer numbers
 # are read exactly the same way as during the runs.
 from eval_baseline import (
-    CONDITIONS, LABELS, RESULTS_DIR, distractor_number, load_rows, numbers_in,
+    CONDITIONS, LABELS, distractor_number, load_rows, numbers_in,
     question_units, read_results, results_path,
 )
 
-TABLES_DIR = str(Path(RESULTS_DIR).parent / "tables")
+# The finished runs live under the package data directory. eval_baseline.py
+# still defaults to results/ at the repo root, so do not import that path.
+_PKG = Path(__file__).resolve().parents[1]
+RESULTS_DIR = str(_PKG / "data" / "results")
+TABLES_DIR = str(Path(RESULTS_DIR) / "latex")
 
 
 # =======================================================================
@@ -56,6 +65,13 @@ def problem_length(row: dict) -> int:
 
 
 _STEPS = None  # filled the first time reasoning_steps() is called
+# Same file the Hugging Face GSM8K test split is built from, in the same order,
+# so problem idx still addresses the test example. Read as JSONL so table
+# building does not import datasets/pyarrow.
+GSM8K_TEST_URL = (
+    "https://raw.githubusercontent.com/openai/grade-school-math/master/"
+    "grade_school_math/data/test.jsonl"
+)
 
 
 def count_steps(solution: str) -> int:
@@ -67,10 +83,20 @@ def count_steps(solution: str) -> int:
     return n
 
 
+def gsm8k_answers() -> list[str]:
+    """GSM8K test solutions, one per line of the original test.jsonl."""
+    path = os.path.join(RESULTS_DIR, "gsm8k_test.jsonl")
+    if not os.path.exists(path):
+        os.makedirs(RESULTS_DIR, exist_ok=True)
+        urllib.request.urlretrieve(GSM8K_TEST_URL, path)
+    with open(path) as f:
+        return [json.loads(line)["answer"] for line in f if line.strip()]
+
+
 def reasoning_steps(row: dict) -> int:
     """Calculations in the GSM8K solution. distractors_final.json has no
-    solutions, so GSM8K is downloaded once and the counts are cached in
-    results/steps.json."""
+    solutions, so the GSM8K test file is downloaded once and the counts are
+    cached in results/steps.json."""
     global _STEPS
     if _STEPS is None:
         cache = os.path.join(RESULTS_DIR, "steps.json")
@@ -78,11 +104,10 @@ def reasoning_steps(row: dict) -> int:
             with open(cache) as f:
                 _STEPS = {int(k): v for k, v in json.load(f).items()}
         else:
-            from datasets import load_dataset
-            gsm = load_dataset("openai/gsm8k", "main", split="test")
+            answers = gsm8k_answers()
             _STEPS = {}
             for r in load_rows():
-                sol = gsm[r["idx"]]["answer"]
+                sol = answers[r["idx"]]
                 # Sanity check: the saved gold answer must match GSM8K's.
                 assert sol.split("####")[-1].strip().replace(",", "") == r["gold"], r["idx"]
                 _STEPS[r["idx"]] = count_steps(sol)
@@ -208,12 +233,46 @@ def write_tex(name: str, colspec: str, header: list, rows: list):
     \\usepackage{booktabs}. Captions and labels go in the paper's .tex file."""
     os.makedirs(TABLES_DIR, exist_ok=True)
     header = [h.replace("%", "\\%") for h in header]  # % starts a comment in LaTeX
-    lines = [f"\\begin{{tabular}}{{{colspec}}}", "\\toprule",
+    # Lets LaTeX Workshop build tables.tex when one of these fragments is open.
+    lines = ["% !TEX root = tables.tex",
+             f"\\begin{{tabular}}{{{colspec}}}", "\\toprule",
              " & ".join(header) + " \\\\", "\\midrule"]
     lines += [" & ".join(r) + " \\\\" for r in rows]
     lines += ["\\bottomrule", "\\end{tabular}", ""]
     with open(os.path.join(TABLES_DIR, f"{name}.tex"), "w") as f:
         f.write("\n".join(lines))
+
+
+def write_viewer(sections: list[tuple[str, str]]):
+    """Write tables.tex, a document that includes every fragment and compiles to a PDF.
+
+    Wide tables are scaled to the page. Open tables.tex in LaTeX Workshop and
+    use View LaTeX PDF. Opening a fragment works too, because each one points
+    at this file with a % !TEX root comment.
+    """
+    parts = [
+        "\\documentclass{article}",
+        "\\usepackage[landscape,margin=0.55in]{geometry}",
+        "\\usepackage{booktabs}",
+        "\\usepackage{array}",
+        "\\usepackage{graphicx}",
+        "\\begin{document}",
+        "No answer is the number of outputs with no \\texttt{Final answer} line. "
+        "There is no result to score, and the problem counts as wrong. "
+        "In the bin tables that count is in brackets.",
+        "",
+    ]
+    for title, name in sections:
+        parts += [
+            f"\\section*{{{title}}}",
+            "\\begin{center}",
+            f"\\resizebox{{\\textwidth}}{{!}}{{\\input{{{name}.tex}}}}",
+            "\\end{center}",
+        ]
+    parts += ["\\end{document}", ""]
+    os.makedirs(TABLES_DIR, exist_ok=True)
+    with open(os.path.join(TABLES_DIR, "tables.tex"), "w") as f:
+        f.write("\n".join(parts) + "\n")
 
 
 # =======================================================================
@@ -225,7 +284,7 @@ def load_finished_results(all_ids: list) -> dict:
     every problem, so a half-finished run never shows up in the tables."""
     results = {}
     for c in CONDITIONS:
-        recs = read_results(results_path(c))
+        recs = read_results(results_path(c, RESULTS_DIR))
         if recs and all(i in recs for i in all_ids):
             results[c] = recs
         elif recs:
@@ -236,6 +295,16 @@ def load_finished_results(all_ids: list) -> dict:
 
 
 def main():
+    global TABLES_DIR
+    parser = argparse.ArgumentParser(description="Build results tables from finished eval runs.")
+    parser.add_argument(
+        "--tables-dir",
+        default=TABLES_DIR,
+        help="Folder for the LaTeX tables (default: data/results/latex).",
+    )
+    args = parser.parse_args()
+    TABLES_DIR = args.tables_dir
+
     rows = load_rows()
     all_ids = [r["idx"] for r in rows]
     row_by_id = {r["idx"]: r for r in rows}
@@ -252,30 +321,37 @@ def main():
         """Accuracy (%) of condition c on a set of problem ids."""
         return 100 * sum(results[c][i]["correct"] for i in ids) / len(ids)
 
+    def no_answer(c, ids):
+        """Problems whose output has no Final answer line, so there is no result.
+        In these runs every one of them also hit the token limit."""
+        return sum(results[c][i]["parse"] != "final_answer_line" for i in ids)
+
     # ---- Table 1: headline ---------------------------------------------------
     # Flips: correct when clean -> wrong with the distractor (and the reverse).
     # Answer changed: the parsed answer differs from the clean answer at all,
     # which also catches one wrong answer turning into a different wrong one.
-    head = ["Condition", "n", "Accuracy (%)", "Change vs. clean", "Correct to wrong",
+    head = ["Condition", "n", "Accuracy (%)", "No answer", "Change vs. clean", "Correct to wrong",
             "Wrong to correct", "Answer changed (%)", "McNemar p"]
     txt, tex = [], []
     for c in conds:
         a = acc(c, all_ids)
+        missing = no_answer(c, all_ids)
         if c == "baseline":
-            txt.append([LABELS[c], len(all_ids), f"{a:.1f}"] + ["-"] * 5)
-            tex.append([LABELS[c], str(len(all_ids)), f"{a:.1f}"] + ["--"] * 5)
+            txt.append([LABELS[c], len(all_ids), f"{a:.1f}", missing] + ["-"] * 5)
+            tex.append([LABELS[c], str(len(all_ids)), f"{a:.1f}", str(missing)] + ["--"] * 5)
             continue
         d = a - acc("baseline", all_ids)
         b = sum(clean[i]["correct"] and not results[c][i]["correct"] for i in all_ids)
         g = sum(not clean[i]["correct"] and results[c][i]["correct"] for i in all_ids)
         changed = 100 * sum(results[c][i]["pred"] != clean[i]["pred"] for i in all_ids) / len(all_ids)
         p = mcnemar_p(b, g)
-        txt.append([LABELS[c], len(all_ids), f"{a:.1f}", fmt_drop(d), b, g,
+        txt.append([LABELS[c], len(all_ids), f"{a:.1f}", missing, fmt_drop(d), b, g,
                     f"{changed:.1f}", fmt_p(p)])
-        tex.append([LABELS[c], str(len(all_ids)), f"{a:.1f}", tex_drop(d), str(b), str(g),
+        tex.append([LABELS[c], str(len(all_ids)), f"{a:.1f}", str(missing), tex_drop(d), str(b), str(g),
                     f"{changed:.1f}", fmt_p(p, tex=True)])
     print_table("Table 1. Accuracy by condition (all problems)", head, txt)
-    write_tex("headline", "l" + "r" * 7, head, tex)
+    write_tex("headline", "l" + "r" * 8, head, tex)
+    viewer = [("Accuracy by condition (all problems)", "headline")]
 
     # ---- One table per bin type ---------------------------------------------
     # Rows are bins, columns are conditions. Each position cell shows accuracy
@@ -297,16 +373,19 @@ def main():
                 tex.append([label, "0"] + ["--"] * len(conds))
                 continue
             base = acc("baseline", ids)
-            t_cells, x_cells = [f"{base:.1f}"], [f"{base:.1f}"]
+            t_cells = [f"{base:.1f} [{no_answer('baseline', ids)}]"]
+            x_cells = [f"{base:.1f} [{no_answer('baseline', ids)}]"]
             for c in positions:
                 a = acc(c, ids)
-                t_cells.append(f"{a:.1f} ({fmt_drop(a - base)})")
-                x_cells.append(f"{a:.1f} ({tex_drop(a - base)})")
+                missing = no_answer(c, ids)
+                t_cells.append(f"{a:.1f} ({fmt_drop(a - base)}) [{missing}]")
+                x_cells.append(f"{a:.1f} ({tex_drop(a - base)}) [{missing}]")
             txt.append([label, len(ids)] + t_cells)
             tex.append([label, str(len(ids))] + x_cells)
         print_table(f"Table {t_num}. Accuracy by {bt['title']}  "
-                    "[accuracy %, change vs. clean in parentheses]", head, txt)
+                    "[accuracy %, change vs. clean in parentheses, no answer in brackets]", head, txt)
         write_tex(f"bins_{bt['name']}", "lr" + "r" * len(conds), head, tex)
+        viewer.append((f"Accuracy by {bt['title']}", f"bins_{bt['name']}"))
     t_next = len(BIN_TYPES) + 2
 
     # How much the bin types overlap (e.g. long problems also needing more
@@ -325,6 +404,7 @@ def main():
     write_tex("bin_ids", "llrp{0.62\\linewidth}", ["Bin type", "Bin", "n", "Problem ids"],
               [[name.capitalize(), label, str(len(ids)), ids_text(ids)]
                for name, label, ids in membership])
+    viewer.append(("Problem ids in each bin", "bin_ids"))
 
     # ---- Flips, and whether the model used the distractor's number -----------
     # "Used the distractor number": the distractor's number shows up in the
@@ -342,15 +422,17 @@ def main():
                         and num not in numbers_in(clean[i]["output"])):
                     used.append(i)
             marked = ", ".join(f"{i}*" if i in used else str(i) for i in flips) or "none"
-            txt.append([LABELS[c], len(flips), len(used)])
-            tex.append([LABELS[c], str(len(flips)), str(len(used)), marked])
+            missing = sum(results[c][i]["parse"] != "final_answer_line" for i in flips)
+            txt.append([LABELS[c], len(flips), missing, len(used)])
+            tex.append([LABELS[c], str(len(flips)), str(missing), str(len(used)), marked])
             lists.append((LABELS[c], len(flips), marked))
-        head = ["Condition", "Correct to wrong", "Used distractor number", "Problem ids"]
+        head = ["Condition", "Correct to wrong", "No answer", "Used distractor number", "Problem ids"]
         print_table(f"Table {t_next + 1}. Flips (correct when clean, wrong with the distractor)",
-                    head[:3], txt)
+                    head[:4], txt)
         for label, n, marked in lists:
             print(f"  {label} (n={n}, * = used distractor number):\n{wrap(marked)}")
-        write_tex("flips", "lrrp{0.5\\linewidth}", head, tex)
+        write_tex("flips", "lrrrp{0.45\\linewidth}", head, tex)
+        viewer.append(("Flips (correct when clean, wrong with the distractor)", "flips"))
 
     # ---- Answer parsing check -------------------------------------------------
     # Outputs without a 'Final answer' line or cut off at the token limit are
@@ -387,8 +469,9 @@ def main():
         for i in all_ids:
             f.write(",".join([str(i)] + [str(values[n][i]) for n in names]
                              + [str(int(results[c][i]["correct"])) for c in conds]) + "\n")
-    print(f"\nLaTeX tables written to {TABLES_DIR}/, per-problem results to "
-          f"{RESULTS_DIR}/per_problem.csv")
+    write_viewer(viewer)
+    print(f"\nLaTeX tables written to {TABLES_DIR}/ (open tables.tex to build a PDF), "
+          f"per-problem results to {RESULTS_DIR}/per_problem.csv")
 
 
 if __name__ == "__main__":

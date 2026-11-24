@@ -1,0 +1,30 @@
+\documentclass{article}
+\usepackage[landscape,margin=0.55in]{geometry}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{graphicx}
+\begin{document}
+No answer is the number of outputs with no \texttt{Final answer} line. There is no result to score, and the problem counts as wrong. In the bin tables that count is in brackets.
+
+\section*{Accuracy by condition (all problems)}
+\begin{center}
+\resizebox{\textwidth}{!}{\input{headline.tex}}
+\end{center}
+\section*{Accuracy by problem length (sentences in the original problem)}
+\begin{center}
+\resizebox{\textwidth}{!}{\input{bins_length.tex}}
+\end{center}
+\section*{Accuracy by reasoning steps (calculations in the GSM8K solution)}
+\begin{center}
+\resizebox{\textwidth}{!}{\input{bins_steps.tex}}
+\end{center}
+\section*{Problem ids in each bin}
+\begin{center}
+\resizebox{\textwidth}{!}{\input{bin_ids.tex}}
+\end{center}
+\section*{Flips (correct when clean, wrong with the distractor)}
+\begin{center}
+\resizebox{\textwidth}{!}{\input{flips.tex}}
+\end{center}
+\end{document}
+
