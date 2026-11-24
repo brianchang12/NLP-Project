@@ -8,7 +8,7 @@ The distractor must follow five rules: same topic (R1), does not change the answ
 
 ```
 nlp_project/src/nlp_project/
-  scripts/          select problems, generate, apply review, sample
+  scripts/          select problems, generate, apply review, sample, evaluate
   data/
     problems/       problem_ids.json
     distractors/    generated rows, review output, and resume log
@@ -54,6 +54,18 @@ Run these in order from the repo root.
 
    Writes `data/samples/validation_sample.json`.
 
+5. **Evaluate.** Run Qwen3.5-2B on the clean problems and on the same distractor at the beginning, middle, and just before the question. Each script resumes from `results/<condition>.jsonl`. Then build the tables.
+
+   ```bash
+   python nlp_project/src/nlp_project/scripts/eval_baseline.py
+   python nlp_project/src/nlp_project/scripts/eval_beginning.py
+   python nlp_project/src/nlp_project/scripts/eval_middle.py
+   python nlp_project/src/nlp_project/scripts/eval_before_question.py
+   python nlp_project/src/nlp_project/scripts/make_tables.py
+   ```
+
+   Writes `results/` and `tables/` at the repo root. `make_tables.py` only reads those result files.
+
 ## Notebooks
 
 `notebooks/` has the Colab versions of the same steps:
@@ -61,6 +73,7 @@ Run these in order from the repo root.
 - `run_select_problems.ipynb`
 - `run_generate_distractors.ipynb` (GPU; set `HF_TOKEN` in Colab secrets)
 - `run_review.ipynb` (apply review, then sample)
+- `run_qwen_eval.ipynb` (GPU; the four eval scripts, then `make_tables.py`)
 
 Each notebook mounts Drive, changes into the project directory, and runs the script paths above.
 

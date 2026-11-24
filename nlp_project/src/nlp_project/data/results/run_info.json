@@ -1,0 +1,11 @@
+{
+  "model": "Qwen/Qwen3.5-2B",
+  "revision": "15852e8c16360a2fea060d615a32b45270f8a8fc",
+  "transformers": "5.22.1",
+  "dtype": "torch.bfloat16",
+  "batch_size": 16,
+  "max_new_tokens": 2048,
+  "decoding": "greedy (do_sample=False)",
+  "thinking": "disabled (enable_thinking=False)",
+  "prompt": "Solve the following math problem. Think step by step, then give the final answer on the last line in the form 'Final answer: <number>'.\n\nProblem: {question}"
+}
